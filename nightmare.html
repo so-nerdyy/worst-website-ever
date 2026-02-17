@@ -214,6 +214,17 @@
         @keyframes captchaBoxWobble { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 25% { transform: translate(-3px, -3px) rotate(-0.5deg); } 75% { transform: translate(3px, 3px) rotate(0.5deg); } }
         .captcha-box h3 { font-size: 20px; margin-bottom: 5px; color: #1a1a2e; }
         .captcha-box .captcha-subtitle { font-size: 13px; color: #888; margin-bottom: 20px; }
+        .captcha-timer { 
+            font-size: 18px; 
+            font-weight: bold; 
+            color: #e94560; 
+            margin-bottom: 10px; 
+            text-align: center;
+            animation: timerPulse 1s infinite;
+        }
+        .captcha-timer.warning { color: #ff0000; animation: timerBlink 0.5s infinite; }
+        @keyframes timerPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        @keyframes timerBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .captcha-grid {
             display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
             margin-bottom: 15px; border: 3px solid #ddd; border-radius: 4px; overflow: hidden;
@@ -222,6 +233,16 @@
             aspect-ratio: 1; background: #e0e0e0; display: flex;
             align-items: center; justify-content: center; font-size: 40px;
             cursor: none !important; transition: all 0.15s; position: relative;
+        }
+        .captcha-grid.distorted .captcha-cell {
+            animation: cellDistort 0.3s infinite;
+            filter: blur(0.5px) hue-rotate(10deg) saturate(1.2);
+        }
+        @keyframes cellDistort {
+            0%, 100% { transform: translateY(0) scale(1); }
+            25% { transform: translateY(-1px) scale(1.02); }
+            50% { transform: translateY(1px) scale(0.98); }
+            75% { transform: translateY(-1px) scale(1.01); }
         }
         .captcha-cell:hover { filter: brightness(0.9); transform: scale(1.05); }
         .captcha-cell.selected { outline: 3px solid #4285f4; outline-offset: -3px; }
@@ -745,6 +766,7 @@
             <div id="captchaContent">
                 <h3>🔒 Verify you are human</h3>
                 <p class="captcha-subtitle" id="captchaPrompt"></p>
+                <div class="captcha-timer" id="captchaTimer">Time: 30s</div>
                 <div class="captcha-grid" id="captchaGrid"></div>
                 <button class="captcha-verify" id="captchaVerify">Verify</button>
                 <div class="captcha-attempts" id="captchaAttempts"></div>
@@ -798,8 +820,8 @@
     <!-- STEP 4: ACCOUNT MISERY -->
     <div class="misery-overlay" id="accountOverlay">
         <div class="misery-card">
-            <h2>Step 4: Create Account Miserably</h2>
-            <p>Please create an account through this aggressively bad form.</p>
+            <h2>Step 4: Create Account</h2>
+            <p>Please create an account through our form.</p>
             <div class="misery-grid">
                 <input class="misery-input misery-jitter" id="accName" placeholder="Username (at least 6 chars)">
                 <input class="misery-input misery-jitter" id="accEmail" placeholder="Email that looks real">
@@ -812,12 +834,13 @@
             </div>
             <div class="misery-note" id="accountRules">
                 <div class="validation-checklist">
-                    <div class="checklist-item" data-rule="username">❌ Username: 6+ characters</div>
+                    <div class="checklist-item" data-rule="username">❌ Username: exactly 8 characters</div>
                     <div class="checklist-item" data-rule="email">❌ Valid email format</div>
                     <div class="checklist-item" data-rule="passLength">❌ Password: 8+ characters</div>
                     <div class="checklist-item" data-rule="passUgh">❌ Password contains "ugh"</div>
+                    <div class="checklist-item" data-rule="passNumber">❌ Password contains at least one number</div>
                     <div class="checklist-item" data-rule="passMatch">❌ Passwords match</div>
-                    <div class="checklist-item" data-rule="suffering">❌ "I AGREE TO SUFFER" (case-insensitive)</div>
+                    <div class="checklist-item" data-rule="suffering">❌ "I AGREE TO HIDDEN TERMS"</div>
                 </div>
             </div>
             <button class="misery-btn" id="accountContinueBtn" disabled>Account complete, move to Step 5</button>
@@ -858,7 +881,7 @@
             </div>
             <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;">
                 <input type="checkbox" id="payFakeAgree">
-                <span>I understand this payment is fake and this suffering is real.</span>
+                <span>I understand this payment is fake and this costs a lot more mentally then from your wallet.</span>
             </label>
             <button class="misery-btn" id="paymentSubmitBtn" disabled>Pretend To Pay And Go To Step 7</button>
         </div>
@@ -867,7 +890,7 @@
     <!-- STEP 7: FINAL FAILURE -->
     <div class="misery-overlay" id="finalOverlay">
         <div class="misery-card">
-            <h2>Step 7: Regret And Final CAPTCHA</h2>
+            <h2>Step 7: One last CAPTCHA</h2>
             <p>You are one click from fake success. Of course there is one final captcha.</p>
             <button class="misery-btn" id="openFinalCaptchaBtn">Place Order Forever</button>
             <div id="finalFailureWall">
@@ -1320,11 +1343,12 @@
             });
         }
 
-        // EVASIVE SKIP BUTTON - moves away but doesn't teleport impossibly
+        // EVASIVE SKIP BUTTON - moves away more frequently and erratically
         var skipBtn = document.getElementById('captchaSkipBtn');
         var captchaBox = document.querySelector('.captcha-box');
         var skipOffsetX = 0;
         var skipOffsetY = 0;
+        var lastSkipMove = 0;
         
         function moveSkipButtonAway(mouseX, mouseY) {
             if (!skipBtn || !captchaBox) return;
@@ -1334,22 +1358,39 @@
             var btnCenterY = btnRect.top + btnRect.height / 2;
             
             var distance = Math.sqrt(Math.pow(mouseX - btnCenterX, 2) + Math.pow(mouseY - btnCenterY, 2));
+            var now = Date.now();
             
-            if (distance < 100) {
-                // Calculate direction away from mouse
-                var angle = Math.atan2(btnCenterY - mouseY, btnCenterX - mouseX);
-                var moveDistance = 80;
+            // Move if mouse gets within 150px (was 100), or randomly every 2 seconds
+            if (distance < 150 || (now - lastSkipMove > 2000 && Math.random() > 0.6)) {
+                lastSkipMove = now;
+                
+                // Calculate direction - sometimes away from mouse, sometimes random
+                var angle;
+                if (distance < 150 && Math.random() > 0.3) {
+                    // Away from mouse
+                    angle = Math.atan2(btnCenterY - mouseY, btnCenterX - mouseX);
+                } else {
+                    // Random direction
+                    angle = Math.random() * Math.PI * 2;
+                }
+                
+                // More erratic movement distance (30-120px, was 80)
+                var moveDistance = 30 + Math.random() * 90;
                 
                 skipOffsetX += Math.cos(angle) * moveDistance;
                 skipOffsetY += Math.sin(angle) * moveDistance;
                 
-                // Limit movement to stay somewhat on screen
-                skipOffsetX = Math.max(-150, Math.min(150, skipOffsetX));
-                skipOffsetY = Math.max(-100, Math.min(100, skipOffsetY));
+                // Allow more movement freedom
+                skipOffsetX = Math.max(-250, Math.min(250, skipOffsetX));
+                skipOffsetY = Math.max(-180, Math.min(180, skipOffsetY));
                 
+                skipBtn.style.transition = 'transform 0.1s ease-out';
                 skipBtn.style.transform = `translate(${skipOffsetX}px, ${skipOffsetY}px)`;
                 
-                const messages = ['Getting closer...', 'Almost...', 'So close!', 'Try again!', 'Nope!'];
+                const messages = [
+                    'Getting closer...', 'Almost...', 'So close!', 'Try again!', 'Nope!',
+                    'Haha!', 'Missed!', 'Too slow!', 'Not today!', 'Keep trying!'
+                ];
                 skipBtn.textContent = messages[Math.floor(Math.random() * messages.length)];
             }
         }
@@ -1883,17 +1924,97 @@
         }
 
         var captchaRounds = [
-            { prompt: 'Select every tile containing "7"', cells: ['7','a','7','k','3','m','x','7','2'], correct: [0,2,7] },
-            { prompt: 'Select every tile containing "#"', cells: ['#','@','#','%','^','!','#','+','='], correct: [0,2,6] }
+            { 
+                prompt: 'Select every tile containing "7"', 
+                cells: ['7','a','7','k','3','m','x','7','2'], 
+                correct: [0,2,7] 
+            },
+            { 
+                prompt: 'Select every tile containing "#"', 
+                cells: ['#','@','#','%','^','!','#','+','='], 
+                correct: [0,2,6] 
+            },
+            {
+                prompt: 'Select all squares that do NOT contain traffic lights',
+                cells: ['🚦','🚗','🚧','🌳','🚙','🚕','🏠','🚲','🌸'],
+                correct: [1,2,3,4,5,6,7,8],
+                invert: true
+            },
+            { 
+                prompt: 'Click the squares in REVERSE alphabetical order (Z to A)',
+                cells: ['🍎','🍌','🍒','🍇','🥝','🍋','🥭','🍊','🍑'],
+                correct: [8,7,6,5,4,3,2,1,0],
+            },
+            { 
+                prompt: 'Select only the four squares with the most similarities between the primary colors derived in the additive color model, aka RGB ',
+                cells: ['🟦','🟩','🟨','🟥','🟪','🟧','⬛','⬜','🟫'],
+                correct: [0,1,3],
+                trick: true
+            }
         ];
+    
+        // Precompute correct order for alphabetical order rounds
+        captchaRounds.forEach(function(round) {
+            if (round.order) {
+                // Sort cells alphabetically (ascending)
+                var sorted = round.cells.slice().sort();
+                // If prompt indicates reverse order, reverse the sorted list
+                if (round.prompt && round.prompt.toLowerCase().includes('reverse')) {
+                    sorted = sorted.reverse();
+                }
+                // Map sorted emojis back to indices in original cells array
+                round.correct = sorted.map(function(emoji) {
+                    return round.cells.indexOf(emoji);
+                });
+            }
+        });
+        
+        // Captcha timer variables
+        var captchaTimeLeft = 30;
+        var captchaTimerInterval = null;
+        
+        function resetCaptchaTimer() {
+            captchaTimeLeft = 30;
+            var timer = document.getElementById('captchaTimer');
+            if (timer) {
+                timer.textContent = 'Time: 30s';
+                timer.classList.remove('warning');
+            }
+            if (captchaTimerInterval) clearInterval(captchaTimerInterval);
+            captchaTimerInterval = setInterval(function() {
+                captchaTimeLeft--;
+                if (timer) {
+                    timer.textContent = 'Time: ' + captchaTimeLeft + 's';
+                    if (captchaTimeLeft <= 10) {
+                        timer.classList.add('warning');
+                    }
+                }
+                if (captchaTimeLeft <= 0) {
+                    clearInterval(captchaTimerInterval);
+                    if (timer) timer.textContent = 'TIME\'S UP!';
+                    // Time out - retry the same round
+                    var attemptsEl = document.getElementById('captchaAttempts');
+                    if (attemptsEl) attemptsEl.textContent = 'Time expired! Try again. Misery is mandatory.';
+                    setTimeout(function() {
+                        renderCaptchaRound(); // retry same round
+                    }, 1500);
+                }
+            }, 1000);
+        }
 
         function resetCaptchaUi() {
             var content = document.getElementById('captchaContent');
             var spinner = document.getElementById('captchaSpinner');
             var skipWrap = document.getElementById('captchaSkipContainer');
+            var timer = document.getElementById('captchaTimer');
             if (content) content.style.display = '';
             if (spinner) spinner.classList.remove('active');
             if (skipWrap) skipWrap.style.display = 'none';
+            if (timer) {
+                timer.textContent = 'Time: 30s';
+                timer.classList.remove('warning');
+            }
+            if (captchaTimerInterval) clearInterval(captchaTimerInterval);
         }
 
         function renderCaptchaRound() {
@@ -1901,20 +2022,43 @@
             var prompt = document.getElementById('captchaPrompt');
             var title = document.querySelector('#captchaOverlay .captcha-box h3');
             var attempts = document.getElementById('captchaAttempts');
+            var timer = document.getElementById('captchaTimer');
             if (!grid || !prompt || !title) return;
             var round = captchaRounds[state.captchaRound] || captchaRounds[0];
             title.textContent = state.captchaMode === 'final' ? 'Final verification before order' : 'Step 3: Verify Humanity';
             prompt.innerHTML = round.prompt;
             grid.innerHTML = '';
+            grid.classList.remove('distorted');
+            
+            // Randomly apply visual distortion to make it harder
+            if (Math.random() > 0.5) {
+                setTimeout(() => grid.classList.add('distorted'), 500);
+            }
+            
+            var clickOrder = 0;
             round.cells.forEach(function(val, idx) {
                 var cell = document.createElement('div');
                 cell.className = 'captcha-cell';
                 cell.textContent = val;
                 cell.setAttribute('data-idx', String(idx));
-                cell.addEventListener('click', function() { cell.classList.toggle('selected'); });
+                cell.setAttribute('data-click-order', '');
+                cell.addEventListener('click', function() {
+                    var isSelected = cell.classList.contains('selected');
+                    if (isSelected) {
+                        cell.classList.remove('selected');
+                        cell.setAttribute('data-click-order', '');
+                    } else {
+                        cell.classList.add('selected');
+                        clickOrder++;
+                        cell.setAttribute('data-click-order', String(clickOrder));
+                    }
+                });
                 grid.appendChild(cell);
             });
             if (attempts) attempts.textContent = '';
+            
+            // Reset timer for this round
+            resetCaptchaTimer();
         }
 
         function openCaptchaFor(mode) {
@@ -1929,13 +2073,35 @@
 
         function handleCaptchaVerify() {
             var round = captchaRounds[state.captchaRound] || captchaRounds[0];
-            var selected = Array.from(document.querySelectorAll('#captchaGrid .captcha-cell.selected')).map(function(c) {
-                return Number(c.getAttribute('data-idx'));
-            }).sort(function(a, b) { return a - b; });
-            var expected = round.correct.slice().sort(function(a, b) { return a - b; });
+            var selectedCells = document.querySelectorAll('#captchaGrid .captcha-cell.selected');
             var attempts = document.getElementById('captchaAttempts');
-
-            var ok = selected.length === expected.length && selected.every(function(v, i) { return v === expected[i]; });
+            
+            // For order-based challenges, check the order of selection
+            var ok = false;
+            if (round.order) {
+                // Must select in exact order specified in round.correct
+                // Get selected cells with their click order
+                var selectedWithOrder = Array.from(selectedCells).map(function(c) {
+                    return {
+                        idx: Number(c.getAttribute('data-idx')),
+                        order: Number(c.getAttribute('data-click-order')) || 0
+                    };
+                });
+                // Sort by click order (ascending)
+                selectedWithOrder.sort(function(a, b) { return a.order - b.order; });
+                var selectedOrder = selectedWithOrder.map(function(item) { return item.idx; });
+                ok = selectedOrder.length === round.correct.length &&
+                     selectedOrder.every(function(v, i) { return v === round.correct[i]; });
+            } else {
+                // For non-order challenges, just check which cells are selected (order doesn't matter)
+                var selectedIndices = Array.from(selectedCells).map(function(c) {
+                    return Number(c.getAttribute('data-idx'));
+                }).sort(function(a, b) { return a - b; });
+                var expected = round.correct.slice().sort(function(a, b) { return a - b; });
+                ok = selectedIndices.length === expected.length &&
+                     selectedIndices.every(function(v, i) { return v === expected[i]; });
+            }
+            
             if (!ok) {
                 if (attempts) attempts.textContent = 'Wrong tiles. Try again. Misery is mandatory.';
                 renderCaptchaRound();
@@ -1952,6 +2118,7 @@
             if (state.captchaMode === 'step3') {
                 var ov = document.getElementById('captchaOverlay');
                 if (ov) ov.classList.remove('active');
+                if (captchaTimerInterval) clearInterval(captchaTimerInterval);
                 state.unlocked = Math.max(state.unlocked, 4);
                 setProgress(4);
                 if (overlays.account) overlays.account.classList.add('active');
@@ -1962,6 +2129,7 @@
             if (state.captchaMode === 'final') {
                 var finalAttempts = document.getElementById('captchaAttempts');
                 if (finalAttempts) finalAttempts.textContent = 'Captcha accepted. Rechecking...';
+                if (captchaTimerInterval) clearInterval(captchaTimerInterval);
                 setTimeout(function() {
                     if (typeof showToast === 'function') showToast('Final captcha failed for mysterious reasons. Restarting everything.');
                     hardResetJourney();
@@ -1982,14 +2150,14 @@
 
             var passVal = pass.value;
             var hasUgh = passVal.toLowerCase().indexOf('ugh') !== -1;
-            var passOk = passVal.length >= 8 && hasUgh;
+            var hasNumber = /\d/.test(passVal);
+            var passOk = passVal.length >= 8 && hasUgh && hasNumber;
             
             // Fake password strength meter with misleading feedback
             if (strengthEl && passVal.length > 0) {
                 // Misleading strength calculation (overestimates)
                 var hasUpper = /[A-Z]/.test(passVal);
                 var hasLower = /[a-z]/.test(passVal);
-                var hasNumber = /\d/.test(passVal);
                 var hasSymbol = /[^A-Za-z0-9]/.test(passVal);
                 var complexityCount = [hasUpper, hasLower, hasNumber, hasSymbol].filter(Boolean).length;
                 
@@ -2026,17 +2194,20 @@
             var emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value);
             // Case-insensitive suffering phrase
             var phraseOk = phrase.value.trim().toLowerCase() === 'i agree to suffer';
-            var ok = name.value.trim().length >= 6 && emailOk && passOk && pass.value === pass2.value && phraseOk;
+            // Case-insensitive password matching
+            var passMatchOk = pass.value.toLowerCase() === pass2.value.toLowerCase() && passVal.length > 0;
+            var ok = name.value.trim().length === 8 && emailOk && passOk && passMatchOk && phraseOk;
             btn.disabled = !ok;
             
             // Update checklist items in real-time
             var checklistItems = rules.querySelectorAll('.checklist-item');
             var updates = [
-                { rule: 'username', met: name.value.trim().length >= 6 },
+                { rule: 'username', met: name.value.trim().length === 8 },
                 { rule: 'email', met: emailOk },
                 { rule: 'passLength', met: passVal.length >= 8 },
                 { rule: 'passUgh', met: hasUgh },
-                { rule: 'passMatch', met: pass.value === pass2.value && passVal.length > 0 },
+                { rule: 'passNumber', met: hasNumber },
+                { rule: 'passMatch', met: passMatchOk },
                 { rule: 'suffering', met: phraseOk }
             ];
             
@@ -2296,7 +2467,7 @@
         window.showCaptcha = function() {
             if (state.step === 3) openCaptchaFor('step3');
             else if (state.step === 7) openCaptchaFor('final');
-            else if (typeof showToast === 'function') showToast('Captcha only appears at step 3 and final step now.');
+            else if (typeof showToast === 'function') showToast('this was a weird error done by the AI, its changed now.');
         };
 
         setInterval(hardSetCartCount, 800);
